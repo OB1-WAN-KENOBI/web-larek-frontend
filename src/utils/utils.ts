@@ -1,135 +1,430 @@
-export function pascalToKebab(value: string): string {
-    return value.replace(/([a-z0–9])([A-Z])/g, "$1-$2").toLowerCase();
-}
+import { VALIDATION, MESSAGES } from './constants';
+import type { EmailValidator, PhoneValidator, AddressValidator, PriceFormatter, PhoneFormatter } from '../types';
 
-export function isSelector(x: any): x is string {
-    return (typeof x === "string") && x.length > 1;
-}
+// ============================================================================
+// ВАЛИДАЦИЯ
+// ============================================================================
 
-export function isEmpty(value: any): boolean {
-    return value === null || value === undefined;
-}
+/**
+ * Валидация email
+ */
+export const validateEmail: EmailValidator = (email: string): boolean => {
+    return VALIDATION.EMAIL_REGEX.test(email.trim());
+};
 
-export type SelectorCollection<T> = string | NodeListOf<Element> | T[];
+/**
+ * Валидация телефона
+ */
+export const validatePhone: PhoneValidator = (phone: string): boolean => {
+    return VALIDATION.PHONE_REGEX.test(phone.trim());
+};
 
-export function ensureAllElements<T extends HTMLElement>(selectorElement: SelectorCollection<T>, context: HTMLElement = document as unknown as HTMLElement): T[] {
-    if (isSelector(selectorElement)) {
-        return Array.from(context.querySelectorAll(selectorElement)) as T[];
+/**
+ * Валидация адреса
+ */
+export const validateAddress: AddressValidator = (address: string): boolean => {
+    return address.trim().length >= VALIDATION.MIN_ADDRESS_LENGTH;
+};
+
+/**
+ * Получение сообщения об ошибке валидации
+ */
+export const getValidationMessage = (field: string, value: string): string => {
+    switch (field) {
+        case 'email':
+            if (!value.trim()) return MESSAGES.EMAIL_REQUIRED;
+            if (!validateEmail(value)) return MESSAGES.EMAIL_INVALID;
+            break;
+        case 'phone':
+            if (!value.trim()) return MESSAGES.PHONE_REQUIRED;
+            if (!validatePhone(value)) return MESSAGES.PHONE_INVALID;
+            break;
+        case 'address':
+            if (!value.trim()) return MESSAGES.ADDRESS_REQUIRED;
+            if (!validateAddress(value)) return MESSAGES.ADDRESS_TOO_SHORT;
+            break;
+        case 'payment':
+            if (!value) return MESSAGES.PAYMENT_REQUIRED;
+            break;
     }
-    if (selectorElement instanceof NodeList) {
-        return Array.from(selectorElement) as T[];
-    }
-    if (Array.isArray(selectorElement)) {
-        return selectorElement;
-    }
-    throw new Error(`Unknown selector element`);
-}
+    return '';
+};
 
-export type SelectorElement<T> = T | string;
+// ============================================================================
+// ФОРМАТИРОВАНИЕ
+// ============================================================================
 
-export function ensureElement<T extends HTMLElement>(selectorElement: SelectorElement<T>, context?: HTMLElement): T {
-    if (isSelector(selectorElement)) {
-        const elements = ensureAllElements<T>(selectorElement, context);
-        if (elements.length > 1) {
-            console.warn(`selector ${selectorElement} return more then one element`);
-        }
-        if (elements.length === 0) {
-            throw new Error(`selector ${selectorElement} return nothing`);
-        }
-        return elements.pop() as T;
+/**
+ * Форматирование цены
+ */
+export const formatPrice: PriceFormatter = (price: number): string => {
+    return `${price.toLocaleString()} синапсов`;
+};
+
+/**
+ * Форматирование телефона
+ */
+export const formatPhone: PhoneFormatter = (phone: string): string => {
+    // Удаляем все нецифровые символы
+    const digits = phone.replace(/\D/g, '');
+    
+    // Если номер начинается с 8, заменяем на +7
+    let formatted = digits;
+    if (digits.startsWith('8')) {
+        formatted = '7' + digits.slice(1);
     }
-    if (selectorElement instanceof HTMLElement) {
-        return selectorElement as T;
+    
+    // Форматируем в виде +7 (XXX) XXX-XX-XX
+    if (formatted.length === 11 && formatted.startsWith('7')) {
+        return `+7 (${formatted.slice(1, 4)}) ${formatted.slice(4, 7)}-${formatted.slice(7, 9)}-${formatted.slice(9)}`;
     }
-    throw new Error('Unknown selector element');
-}
+    
+    return phone;
+};
 
-export function cloneTemplate<T extends HTMLElement>(query: string | HTMLTemplateElement): T {
-    const template = ensureElement(query) as HTMLTemplateElement;
-    return template.content.firstElementChild.cloneNode(true) as T;
-}
-
-export function bem(block: string, element?: string, modifier?: string): { name: string, class: string } {
-    let name = block;
-    if (element) name += `__${element}`;
-    if (modifier) name += `_${modifier}`;
-    return {
-        name,
-        class: `.${name}`
+/**
+ * Форматирование категории товара
+ */
+export const formatCategory = (category: string): string => {
+    const categoryMap: Record<string, string> = {
+        'soft': 'софт-скил',
+        'hard': 'хард-скил',
+        'other': 'другое'
     };
-}
+    return categoryMap[category] || category;
+};
 
-export function getObjectProperties(obj: object, filter?: (name: string, prop: PropertyDescriptor) => boolean): string[] {
-    return Object.entries(
-        Object.getOwnPropertyDescriptors(
-            Object.getPrototypeOf(obj)
-        )
-    )
-        .filter(([name, prop]: [string, PropertyDescriptor]) => filter ? filter(name, prop) : (name !== 'constructor'))
-        .map(([name, prop]) => name);
-}
+// ============================================================================
+// РАБОТА С DOM
+// ============================================================================
 
 /**
- * Устанавливает dataset атрибуты элемента
+ * Создание элемента с классом
  */
-export function setElementData<T extends Record<string, unknown> | object>(el: HTMLElement, data: T) {
-    for (const key in data) {
-        el.dataset[key] = String(data[key]);
-    }
-}
-
-/**
- * Получает типизированные данные из dataset атрибутов элемента
- */
-export function getElementData<T extends Record<string, unknown>>(el: HTMLElement, scheme: Record<string, Function>): T {
-    const data: Partial<T> = {};
-    for (const key in el.dataset) {
-        data[key as keyof T] = scheme[key](el.dataset[key]);
-    }
-    return data as T;
-}
-
-/**
- * Проверка на простой объект
- */
-export function isPlainObject(obj: unknown): obj is object {
-    const prototype = Object.getPrototypeOf(obj);
-    return  prototype === Object.getPrototypeOf({}) ||
-        prototype === null;
-}
-
-export function isBoolean(v: unknown): v is boolean {
-    return typeof v === 'boolean';
-}
-
-/**
- * Фабрика DOM-элементов в простейшей реализации
- * здесь не учтено много факторов
- * в интернет можно найти более полные реализации
- */
-export function createElement<
-    T extends HTMLElement
-    >(
-    tagName: keyof HTMLElementTagNameMap,
-    props?: Partial<Record<keyof T, string | boolean | object>>,
-    children?: HTMLElement | HTMLElement []
-): T {
-    const element = document.createElement(tagName) as T;
-    if (props) {
-        for (const key in props) {
-            const value = props[key];
-            if (isPlainObject(value) && key === 'dataset') {
-                setElementData(element, value);
-            } else {
-                // @ts-expect-error fix indexing later
-                element[key] = isBoolean(value) ? value : String(value);
-            }
-        }
-    }
-    if (children) {
-        for (const child of Array.isArray(children) ? children : [children]) {
-            element.append(child);
-        }
+export const createElement = <K extends keyof HTMLElementTagNameMap>(
+    tag: K,
+    className?: string
+): HTMLElementTagNameMap[K] => {
+    const element = document.createElement(tag);
+    if (className) {
+        element.className = className;
     }
     return element;
-}
+};
+
+/**
+ * Получение элемента по селектору
+ */
+export const ensureElement = <T extends HTMLElement>(
+    parentElement: HTMLElement,
+    selector: string
+): T => {
+    const element = parentElement.querySelector<T>(selector);
+    if (!element) {
+        throw new Error(`Элемент с селектором "${selector}" не найден`);
+    }
+    return element;
+};
+
+/**
+ * Клонирование шаблона
+ */
+export const cloneTemplate = (templateId: string): HTMLElement => {
+    const template = document.getElementById(templateId) as HTMLTemplateElement;
+    if (!template) {
+        throw new Error(`Шаблон с id "${templateId}" не найден`);
+    }
+    return template.content.cloneNode(true) as HTMLElement;
+};
+
+/**
+ * Установка текстового содержимого
+ */
+export const setText = (element: HTMLElement, text: string): void => {
+    element.textContent = text;
+};
+
+/**
+ * Установка атрибута src для изображения
+ */
+export const setImage = (element: HTMLImageElement, src: string, alt?: string): void => {
+    element.src = src;
+    if (alt) {
+        element.alt = alt;
+    }
+};
+
+/**
+ * Добавление/удаление класса
+ */
+export const toggleClass = (element: HTMLElement, className: string, force?: boolean): void => {
+    element.classList.toggle(className, force);
+};
+
+/**
+ * Проверка наличия класса
+ */
+export const hasClass = (element: HTMLElement, className: string): boolean => {
+    return element.classList.contains(className);
+};
+
+// ============================================================================
+// РАБОТА С СОБЫТИЯМИ
+// ============================================================================
+
+/**
+ * Добавление обработчика события
+ */
+export const addListener = (
+    element: HTMLElement,
+    event: string,
+    handler: EventListener,
+    options?: AddEventListenerOptions
+): void => {
+    element.addEventListener(event, handler, options);
+};
+
+/**
+ * Удаление обработчика события
+ */
+export const removeListener = (
+    element: HTMLElement,
+    event: string,
+    handler: EventListener,
+    options?: EventListenerOptions
+): void => {
+    element.removeEventListener(event, handler, options);
+};
+
+/**
+ * Предотвращение всплытия события
+ */
+export const preventDefault = (event: Event): void => {
+    event.preventDefault();
+};
+
+/**
+ * Остановка всплытия события
+ */
+export const stopPropagation = (event: Event): void => {
+    event.stopPropagation();
+};
+
+// ============================================================================
+// РАБОТА С ЛОКАЛЬНЫМ ХРАНИЛИЩЕМ
+// ============================================================================
+
+/**
+ * Сохранение данных в localStorage
+ */
+export const saveToStorage = <T>(key: string, data: T): void => {
+    try {
+        localStorage.setItem(key, JSON.stringify(data));
+    } catch (error) {
+        console.error('Ошибка сохранения в localStorage:', error);
+    }
+};
+
+/**
+ * Загрузка данных из localStorage
+ */
+export const loadFromStorage = <T>(key: string, defaultValue: T): T => {
+    try {
+        const item = localStorage.getItem(key);
+        return item ? JSON.parse(item) : defaultValue;
+    } catch (error) {
+        console.error('Ошибка загрузки из localStorage:', error);
+        return defaultValue;
+    }
+};
+
+/**
+ * Удаление данных из localStorage
+ */
+export const removeFromStorage = (key: string): void => {
+    try {
+        localStorage.removeItem(key);
+    } catch (error) {
+        console.error('Ошибка удаления из localStorage:', error);
+    }
+};
+
+// ============================================================================
+// УТИЛИТЫ ДЛЯ РАБОТЫ С МАССИВАМИ
+// ============================================================================
+
+/**
+ * Группировка массива по ключу
+ */
+export const groupBy = <T, K extends keyof any>(
+    array: T[],
+    key: (item: T) => K
+): Record<K, T[]> => {
+    return array.reduce((groups, item) => {
+        const group = key(item);
+        groups[group] = groups[group] || [];
+        groups[group].push(item);
+        return groups;
+    }, {} as Record<K, T[]>);
+};
+
+/**
+ * Удаление дубликатов из массива
+ */
+export const unique = <T>(array: T[]): T[] => {
+    return [...new Set(array)];
+};
+
+/**
+ * Случайный элемент из массива
+ */
+export const randomItem = <T>(array: T[]): T | undefined => {
+    if (array.length === 0) return undefined;
+    return array[Math.floor(Math.random() * array.length)];
+};
+
+// ============================================================================
+// УТИЛИТЫ ДЛЯ РАБОТЫ С ОБЪЕКТАМИ
+// ============================================================================
+
+/**
+ * Глубокое клонирование объекта
+ */
+export const deepClone = <T>(obj: T): T => {
+    if (obj === null || typeof obj !== 'object') {
+        return obj;
+    }
+    
+    if (obj instanceof Date) {
+        return new Date(obj.getTime()) as unknown as T;
+    }
+    
+    if (obj instanceof Array) {
+        return obj.map(item => deepClone(item)) as unknown as T;
+    }
+    
+    if (typeof obj === 'object') {
+        const cloned = {} as T;
+        for (const key in obj) {
+            if (obj.hasOwnProperty(key)) {
+                cloned[key] = deepClone(obj[key]);
+            }
+        }
+        return cloned;
+    }
+    
+    return obj;
+};
+
+/**
+ * Проверка на пустой объект
+ */
+export const isEmpty = (obj: any): boolean => {
+    if (obj == null) return true;
+    if (Array.isArray(obj) || typeof obj === 'string') return obj.length === 0;
+    return Object.keys(obj).length === 0;
+};
+
+// ============================================================================
+// УТИЛИТЫ ДЛЯ РАБОТЫ СО СТРОКАМИ
+// ============================================================================
+
+/**
+ * Капитализация первой буквы
+ */
+export const capitalize = (str: string): string => {
+    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+};
+
+/**
+ * Обрезка строки до указанной длины
+ */
+export const truncate = (str: string, length: number, suffix: string = '...'): string => {
+    if (str.length <= length) return str;
+    return str.slice(0, length) + suffix;
+};
+
+/**
+ * Замена плейсхолдеров в строке
+ */
+export const replacePlaceholders = (template: string, data: Record<string, any>): string => {
+    return template.replace(/\{(\w+)\}/g, (match, key) => {
+        return data[key] !== undefined ? String(data[key]) : match;
+    });
+};
+
+// ============================================================================
+// УТИЛИТЫ ДЛЯ РАБОТЫ С ЧИСЛАМИ
+// ============================================================================
+
+/**
+ * Ограничение числа в диапазоне
+ */
+export const clamp = (value: number, min: number, max: number): number => {
+    return Math.min(Math.max(value, min), max);
+};
+
+/**
+ * Проверка на четное число
+ */
+export const isEven = (num: number): boolean => {
+    return num % 2 === 0;
+};
+
+/**
+ * Округление до указанного количества знаков
+ */
+export const roundTo = (num: number, decimals: number): number => {
+    return Math.round(num * Math.pow(10, decimals)) / Math.pow(10, decimals);
+};
+
+// ============================================================================
+// УТИЛИТЫ ДЛЯ РАБОТЫ С ДАТАМИ
+// ============================================================================
+
+/**
+ * Форматирование даты
+ */
+export const formatDate = (date: Date, format: string = 'DD.MM.YYYY'): string => {
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    
+    return format
+        .replace('DD', day)
+        .replace('MM', month)
+        .replace('YYYY', year.toString());
+};
+
+/**
+ * Проверка на сегодняшнюю дату
+ */
+export const isToday = (date: Date): boolean => {
+    const today = new Date();
+    return date.toDateString() === today.toDateString();
+};
+
+// ============================================================================
+// УТИЛИТЫ ДЛЯ ОТЛАДКИ
+// ============================================================================
+
+/**
+ * Логирование с префиксом
+ */
+export const log = (message: string, data?: any): void => {
+    console.log(`[WEB-LAREK] ${message}`, data);
+};
+
+/**
+ * Логирование ошибок
+ */
+export const logError = (message: string, error?: any): void => {
+    console.error(`[WEB-LAREK] ERROR: ${message}`, error);
+};
+
+/**
+ * Проверка на режим разработки
+ */
+export const isDevelopment = (): boolean => {
+    return process.env.NODE_ENV === 'development';
+};
