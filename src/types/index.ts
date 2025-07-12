@@ -189,6 +189,13 @@ export interface IModal extends IComponent {
 }
 
 /**
+ * Интерфейс для компонентов модальных окон
+ */
+export interface IModalContent extends IComponent {
+    render(): HTMLElement;
+}
+
+/**
  * Интерфейс для карточки товара
  */
 export interface IProductCard extends IComponent {
@@ -303,11 +310,11 @@ export interface IMainView extends IComponent {
 }
 
 /**
- * Интерфейс для модального окна товара
+ * Интерфейс для компонента товара в модальном окне
  */
-export interface IProductModal extends IModal {
-    setProduct(product: IProductModel): void;
-    setInBasket(inBasket: boolean): void;
+export interface IProduct extends IModalContent {
+	setProduct(product: IProductModel): void;
+	setInBasket(inBasket: boolean): void;
 }
 
 /**
@@ -328,10 +335,10 @@ export interface IOrderModal extends IModal {
 }
 
 /**
- * Интерфейс для модального окна успешного заказа
+ * Интерфейс для компонента успешного заказа
  */
-export interface ISuccessModal extends IModal {
-    setTotal(total: number): void;
+export interface ISuccess extends IModalContent {
+	setTotal(total: number): void;
 }
 
 // ============================================================================
@@ -356,10 +363,10 @@ export interface IMainPresenter {
  * Интерфейс презентера товара
  */
 export interface IProductPresenter {
-    setProduct(productId: string): void;
-    addToBasket(): void;
-    removeFromBasket(): void;
-    close(): void;
+	setProduct(productId: string): void;
+	addToBasket(): void;
+	removeFromBasket(): void;
+	openModal(): void;
 }
 
 /**
