@@ -1,5 +1,5 @@
 import { ISuccess } from '../types';
-import { CSS_CLASSES, TEMPLATES } from '../utils/constants';
+import { CSS_CLASSES, TEMPLATES, EVENTS } from '../utils/constants';
 import {
 	cloneTemplate,
 	setText,
@@ -7,13 +7,16 @@ import {
 	removeListener,
 	formatPrice,
 } from '../utils/utils';
+import { EventEmitter } from '../components/base/events';
 
 export class Success implements ISuccess {
 	protected element: HTMLElement;
-	protected total: number = 0;
+	protected total = 0;
 	protected closeButton: HTMLButtonElement | null = null;
+	protected events: EventEmitter;
 
-	constructor() {
+	constructor(events: EventEmitter) {
+		this.events = events;
 		this.element = cloneTemplate(TEMPLATES.SUCCESS);
 		this.bindEvents();
 	}
@@ -34,10 +37,7 @@ export class Success implements ISuccess {
 	 * Обработчик закрытия
 	 */
 	protected handleClose(event: Event): void {
-		const customEvent = new CustomEvent('success:close', {
-			bubbles: true,
-		});
-		this.element.dispatchEvent(customEvent);
+		this.events.emit(EVENTS.MODAL_CLOSE);
 	}
 
 	/**

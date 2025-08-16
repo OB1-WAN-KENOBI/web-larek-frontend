@@ -12,6 +12,7 @@ export class OrderApi implements IOrderApi {
 	 * Создать заказ
 	 */
 	async createOrder(order: IOrder): Promise<{ id: string }> {
-		return this.api.post('/orders', order) as Promise<{ id: string }>;
+		// API weblarek ожидает endpoint в единственном числе
+		return this.api.post('/order', order) as Promise<{ id: string }>;
 	}
 }

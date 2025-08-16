@@ -1,5 +1,5 @@
 import { IBasket, IProductModel } from '../types';
-import { CSS_CLASSES, TEMPLATES } from '../utils/constants';
+import { CSS_CLASSES, TEMPLATES, EVENTS } from '../utils/constants';
 import {
 	cloneTemplate,
 	setText,
@@ -7,6 +7,7 @@ import {
 	removeListener,
 	formatPrice,
 } from '../utils/utils';
+import { EventEmitter } from '../components/base/events';
 
 export class Basket implements IBasket {
 	protected element: HTMLElement;
@@ -14,16 +15,18 @@ export class Basket implements IBasket {
 	protected totalElement: HTMLElement;
 	protected button: HTMLButtonElement | null = null;
 	protected items: IProductModel[] = [];
-	protected total: number = 0;
+	protected total = 0;
+	protected events: EventEmitter;
 
-	constructor() {
-		this.element = cloneTemplate(TEMPLATES.BASKET);
+	constructor(events: EventEmitter) {
+		this.events = events;
+		const template = cloneTemplate(TEMPLATES.BASKET);
+		this.element = template.firstElementChild as HTMLElement;
 		this.list = this.element.querySelector(`.${CSS_CLASSES.BASKET_LIST}`)!;
 		this.totalElement = this.element.querySelector(
 			`.${CSS_CLASSES.BASKET_PRICE}`
 		)!;
 		this.button = this.element.querySelector(`.${CSS_CLASSES.BUTTON}`);
-
 		this.bindEvents();
 	}
 
@@ -45,11 +48,7 @@ export class Basket implements IBasket {
 	 */
 	protected handleOrderClick(event: Event): void {
 		if (this.items.length > 0) {
-			const customEvent = new CustomEvent('basket:order', {
-				detail: { items: this.items, total: this.total },
-				bubbles: true,
-			});
-			this.element.dispatchEvent(customEvent);
+			this.events.emit(EVENTS.ORDER_START);
 		}
 	}
 
@@ -58,23 +57,28 @@ export class Basket implements IBasket {
 	 */
 	protected handleItemClick(event: Event): void {
 		const target = event.target as HTMLElement;
+		const deleteButton = target.closest(
+			`.${CSS_CLASSES.BASKET_ITEM_DELETE}`
+		) as HTMLElement | null;
 
-		if (target.classList.contains(CSS_CLASSES.BASKET_ITEM_DELETE)) {
-			const item = target.closest(`.${CSS_CLASSES.BASKET_ITEM}`);
-			if (item) {
-				const index = item.getAttribute('data-index');
-				if (index) {
-					const productId = this.items[parseInt(index)]?.id;
-					if (productId) {
-						const customEvent = new CustomEvent('product:remove', {
-							detail: { productId },
-							bubbles: true,
-						});
-						this.element.dispatchEvent(customEvent);
-					}
-				}
-			}
+		if (!deleteButton) return;
+
+		// Пытаемся взять productId напрямую с кнопки
+		const productId = deleteButton.getAttribute('data-id');
+		if (productId) {
+			this.events.emit(EVENTS.PRODUCT_REMOVE, { productId });
+			return;
 		}
+
+		// Фолбэк: определяем по data-index контейнера
+		const item = deleteButton.closest(`.${CSS_CLASSES.BASKET_ITEM}`);
+		if (!item) return;
+		const index = item.getAttribute('data-index');
+		if (!index) return;
+		const productIndex = parseInt(index);
+		const product = this.items[productIndex];
+		if (product)
+			this.events.emit(EVENTS.PRODUCT_REMOVE, { productId: product.id });
 	}
 
 	/**
@@ -99,8 +103,16 @@ export class Basket implements IBasket {
 	 * Обновить общую стоимость
 	 */
 	updateTotal(): void {
-		this.total = this.items.reduce((sum, item) => sum + item.price, 0);
+		this.total = this.items.reduce((sum, item) => sum + (item.price || 0), 0);
 		setText(this.totalElement, formatPrice(this.total));
+	}
+
+	/**
+	 * Обновить корзину
+	 */
+	updateBasket(items: IProductModel[]): void {
+		this.items = items;
+		this.renderBasket();
 	}
 
 	/**
@@ -136,7 +148,6 @@ export class Basket implements IBasket {
 
 		// Обновляем общую стоимость
 		this.updateTotal();
-
 		// Обновляем состояние кнопки
 		if (this.button) {
 			this.button.disabled = this.items.length === 0;
@@ -182,6 +193,16 @@ export class Basket implements IBasket {
 			setText(indexElement, (index + 1).toString());
 		}
 
+		// Проставляем явный id на кнопку удаления и делаем кнопку type="button"
+		const deleteButton = item.querySelector(
+			`.${CSS_CLASSES.BASKET_ITEM_DELETE}`
+		) as HTMLElement;
+		if (deleteButton) {
+			deleteButton.setAttribute('data-id', product.id);
+			if (deleteButton instanceof HTMLButtonElement) {
+				deleteButton.type = 'button';
+			}
+		}
 		return item;
 	}
 

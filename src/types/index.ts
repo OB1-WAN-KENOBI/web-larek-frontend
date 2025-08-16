@@ -168,7 +168,7 @@ export interface IComponent {
 export interface IEventEmitter {
 	on<T extends object>(event: string, callback: (data: T) => void): void;
 	emit<T extends object>(event: string, data?: T): void;
-	off(event: string, callback: Function): void;
+	off<T extends object>(event: string, callback: (data: T) => void): void;
 }
 
 /**

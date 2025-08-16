@@ -52,10 +52,6 @@ class App {
 	}
 
 	private init(): void {
-		console.log('WEB-ларёк: Приложение инициализировано');
-		console.log('Архитектура: MVP с EventEmitter');
-		console.log('API URL:', API_URL);
-
 		// Инициализация презентера
 		this.presenter.init();
 
@@ -72,10 +68,7 @@ class App {
 			});
 		}
 
-		// Слушаем все события для отладки
-		this.events.onAll((event) => {
-			console.log('Событие:', event);
-		});
+		// Подписка на все события отключена в проде
 	}
 }
 

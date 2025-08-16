@@ -2,14 +2,17 @@ import { IMainView, IProductModel } from '../types';
 import { CSS_CLASSES } from '../utils/constants';
 import { ensureElement, setText } from '../utils/utils';
 import { ProductCard } from '../components/ProductCard';
+import { EventEmitter } from '../components/base/events';
 
 export class MainView implements IMainView {
 	protected container: HTMLElement;
 	protected gallery: HTMLElement;
 	protected basketCounter: HTMLElement;
 	protected cards: ProductCard[] = [];
+	protected events: EventEmitter;
 
-	constructor() {
+	constructor(events: EventEmitter) {
+		this.events = events;
 		this.container = document.querySelector('.page') as HTMLElement;
 		this.gallery = ensureElement<HTMLElement>(
 			this.container,
@@ -31,7 +34,7 @@ export class MainView implements IMainView {
 
 		// Создаем карточки товаров
 		products.forEach((product) => {
-			const card = new ProductCard();
+			const card = new ProductCard(this.events);
 			card.setProduct(product);
 			card.setInBasket(product.inBasket);
 

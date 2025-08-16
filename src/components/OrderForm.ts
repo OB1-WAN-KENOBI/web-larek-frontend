@@ -1,5 +1,5 @@
 import { IOrderForm, IOrderModel, PaymentMethod } from '../types';
-import { CSS_CLASSES, PAYMENT_METHODS } from '../utils/constants';
+import { CSS_CLASSES, PAYMENT_METHODS, EVENTS } from '../utils/constants';
 import {
 	cloneTemplate,
 	addListener,
@@ -10,6 +10,7 @@ import {
 	validateAddress,
 	formatPhone,
 } from '../utils/utils';
+import { EventEmitter } from '../components/base/events';
 
 export class OrderForm implements IOrderForm {
 	protected element: HTMLElement;
@@ -27,8 +28,10 @@ export class OrderForm implements IOrderForm {
 	protected phoneInput: HTMLInputElement | null = null;
 	protected submitButton: HTMLButtonElement | null = null;
 	protected errorsElement: HTMLElement | null = null;
+	protected events: EventEmitter;
 
-	constructor() {
+	constructor(events: EventEmitter) {
+		this.events = events;
 		this.element = this.createForm();
 		this.bindEvents();
 	}
@@ -48,8 +51,8 @@ export class OrderForm implements IOrderForm {
             <div class="${CSS_CLASSES.ORDER_FIELD}">
                 <h2 class="${CSS_CLASSES.MODAL_TITLE}">Способ оплаты</h2>
                 <div class="${CSS_CLASSES.ORDER_BUTTONS}">
-                    <button name="online" type="button" class="${CSS_CLASSES.BUTTON} ${CSS_CLASSES.BUTTON_ALT}">Онлайн</button>
-                    <button name="card" type="button" class="${CSS_CLASSES.BUTTON} ${CSS_CLASSES.BUTTON_ALT}">При получении</button>
+                    <button name="online" type="button" class="${CSS_CLASSES.BUTTON}">Онлайн</button>
+                    <button name="card" type="button" class="${CSS_CLASSES.BUTTON}">При получении</button>
                 </div>
             </div>
             <label class="${CSS_CLASSES.ORDER_FIELD}">
@@ -183,12 +186,8 @@ export class OrderForm implements IOrderForm {
 		if (this.currentStep === 1 && this.validateStep1()) {
 			this.setStep(2);
 		} else if (this.currentStep === 2 && this.validateStep2()) {
-			// Отправляем заказ
-			const customEvent = new CustomEvent('order:submit', {
-				detail: { data: this.data },
-				bubbles: true,
-			});
-			this.element.dispatchEvent(customEvent);
+			// Отправляем заказ через EventEmitter
+			this.events.emit(EVENTS.ORDER_SUBMIT, { data: this.data });
 		}
 	}
 
@@ -243,14 +242,20 @@ export class OrderForm implements IOrderForm {
 	 * Валидация первого шага
 	 */
 	protected validateStep1(): boolean {
-		return this.data.payment !== null && validateAddress(this.data.address);
+		const hasPayment = this.data.payment !== null;
+		const hasAddress = this.data.address.trim().length >= 10;
+
+		return hasPayment && hasAddress;
 	}
 
 	/**
 	 * Валидация второго шага
 	 */
 	protected validateStep2(): boolean {
-		return validateEmail(this.data.email) && validatePhone(this.data.phone);
+		const hasEmail = validateEmail(this.data.email);
+		const hasPhone = validatePhone(this.data.phone);
+
+		return hasEmail && hasPhone;
 	}
 
 	/**
@@ -277,7 +282,19 @@ export class OrderForm implements IOrderForm {
 			}
 		}
 
-		setText(this.errorsElement, errors.join(', '));
+		if (errors.length > 0) {
+			this.errorsElement.style.display = 'block';
+			this.errorsElement.style.color = 'red';
+			this.errorsElement.style.fontSize = '14px';
+			this.errorsElement.style.marginTop = '10px';
+			this.errorsElement.style.padding = '10px';
+			this.errorsElement.style.backgroundColor = '#ffe6e6';
+			this.errorsElement.style.border = '1px solid #ff9999';
+			this.errorsElement.style.borderRadius = '5px';
+			setText(this.errorsElement, errors.join(', '));
+		} else {
+			this.errorsElement.style.display = 'none';
+		}
 	}
 
 	/**

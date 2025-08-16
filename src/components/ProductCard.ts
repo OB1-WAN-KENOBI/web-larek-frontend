@@ -1,5 +1,5 @@
 import { IProductCard, IProductModel } from '../types';
-import { CSS_CLASSES, TEMPLATES, CDN_URL } from '../utils/constants';
+import { CSS_CLASSES, TEMPLATES, CDN_URL, EVENTS } from '../utils/constants';
 import {
 	cloneTemplate,
 	setText,
@@ -9,14 +9,22 @@ import {
 	formatPrice,
 	formatCategory,
 } from '../utils/utils';
+import { EventEmitter } from '../components/base/events';
 
 export class ProductCard implements IProductCard {
 	protected element: HTMLElement;
 	protected product: IProductModel | null = null;
 	protected button: HTMLButtonElement | null = null;
+	protected events: EventEmitter;
 
-	constructor() {
-		this.element = cloneTemplate(TEMPLATES.CARD_CATALOG);
+	constructor(events: EventEmitter) {
+		this.events = events;
+		const template = cloneTemplate(TEMPLATES.CARD_CATALOG);
+		// Клонируем шаблон и получаем первый элемент
+		this.element = template.firstElementChild as HTMLElement;
+		if (!this.element) {
+			throw new Error('Failed to create ProductCard element');
+		}
 		this.bindEvents();
 	}
 
@@ -24,11 +32,11 @@ export class ProductCard implements IProductCard {
 	 * Привязать события
 	 */
 	protected bindEvents(): void {
-		// Клик по карточке для открытия деталей
-		addListener(this.element, 'click', this.handleCardClick.bind(this));
+		// Обработчик клика по карточке
+		this.element.addEventListener('click', this.handleCardClick.bind(this));
 
-		// Клик по кнопке для добавления в корзину
-		this.button = this.element.querySelector(`.${CSS_CLASSES.BUTTON}`);
+		// Обработчик клика по кнопке (используем CARD_BUTTON)
+		this.button = this.element.querySelector(`.${CSS_CLASSES.CARD_BUTTON}`);
 		if (this.button) {
 			addListener(this.button, 'click', this.handleButtonClick.bind(this));
 		}
@@ -38,13 +46,17 @@ export class ProductCard implements IProductCard {
 	 * Обработчик клика по карточке
 	 */
 	protected handleCardClick(event: Event): void {
+		// Проверяем, что клик не по кнопке
+		if (event.target === this.button) {
+			return;
+		}
+
 		if (this.product) {
-			// Эмитим событие для открытия модального окна с деталями
-			const customEvent = new CustomEvent('product:click', {
-				detail: { product: this.product },
-				bubbles: true,
+			// Используем EventEmitter для открытия модального окна
+			this.events.emit(EVENTS.MODAL_OPEN, {
+				type: 'product',
+				data: { productId: this.product.id },
 			});
-			this.element.dispatchEvent(customEvent);
 		}
 	}
 
@@ -57,18 +69,10 @@ export class ProductCard implements IProductCard {
 		if (this.product) {
 			if (this.product.inBasket) {
 				// Удаляем из корзины
-				const customEvent = new CustomEvent('product:remove', {
-					detail: { productId: this.product.id },
-					bubbles: true,
-				});
-				this.element.dispatchEvent(customEvent);
+				this.events.emit(EVENTS.PRODUCT_REMOVE, { productId: this.product.id });
 			} else {
 				// Добавляем в корзину
-				const customEvent = new CustomEvent('product:add', {
-					detail: { product: this.product },
-					bubbles: true,
-				});
-				this.element.dispatchEvent(customEvent);
+				this.events.emit(EVENTS.PRODUCT_ADD, { product: this.product });
 			}
 		}
 	}
@@ -82,12 +86,12 @@ export class ProductCard implements IProductCard {
 	}
 
 	/**
-	 * Установить состояние корзины
+	 * Установить статус в корзине
 	 */
 	setInBasket(inBasket: boolean): void {
 		if (this.product) {
 			this.product.inBasket = inBasket;
-			this.updateButton();
+			this.renderCard();
 		}
 	}
 
@@ -110,7 +114,9 @@ export class ProductCard implements IProductCard {
 	 * Рендер карточки
 	 */
 	protected renderCard(): void {
-		if (!this.product) return;
+		if (!this.product) {
+			return;
+		}
 
 		// Устанавливаем заголовок
 		const title = this.element.querySelector(
@@ -120,15 +126,31 @@ export class ProductCard implements IProductCard {
 			setText(title, this.product.title);
 		}
 
+		// Устанавливаем описание (используем CARD_TEXT вместо CARD_DESCRIPTION)
+		const description = this.element.querySelector(
+			`.${CSS_CLASSES.CARD_TEXT}`
+		) as HTMLElement;
+		if (description) {
+			setText(description, this.product.description);
+		}
+
+		// Устанавливаем категорию
+		const category = this.element.querySelector(
+			`.${CSS_CLASSES.CARD_CATEGORY}`
+		) as HTMLElement;
+		if (category) {
+			setText(category, formatCategory(this.product.category));
+		}
+
 		// Устанавливаем изображение
 		const image = this.element.querySelector(
 			`.${CSS_CLASSES.CARD_IMAGE}`
 		) as HTMLImageElement;
 		if (image) {
-			const imageUrl = this.product.image.startsWith('http')
+			const imagePath = this.product.image.startsWith('http')
 				? this.product.image
-				: `${CDN_URL}${this.product.image}`;
-			setImage(image, imageUrl, this.product.title);
+				: CDN_URL + this.product.image;
+			setImage(image, imagePath);
 		}
 
 		// Устанавливаем цену
@@ -139,19 +161,10 @@ export class ProductCard implements IProductCard {
 			setText(price, formatPrice(this.product.price));
 		}
 
-		// Устанавливаем категорию
-		const category = this.element.querySelector(
-			`.${CSS_CLASSES.CARD_CATEGORY}`
-		) as HTMLElement;
-		if (category) {
-			setText(category, formatCategory(this.product.category));
-
-			// Устанавливаем класс категории
-			category.className = `${CSS_CLASSES.CARD_CATEGORY} card__category_${this.product.category}`;
+		// Устанавливаем текст кнопки
+		if (this.button) {
+			setText(this.button, this.product.inBasket ? 'Убрать' : 'Купить');
 		}
-
-		// Обновляем кнопку
-		this.updateButton();
 	}
 
 	/**

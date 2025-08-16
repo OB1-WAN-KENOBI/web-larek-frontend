@@ -32,7 +32,6 @@ export class ProductModel implements IProductModelManager {
 			...product,
 			inBasket: false,
 		}));
-
 		this.events.emit(EVENTS.PRODUCTS_LOADED, { products: this.products });
 	}
 

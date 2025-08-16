@@ -41,6 +41,8 @@ export class Modal implements IModal {
 	 */
 	open(data?: any): void {
 		this.container.classList.add(CSS_CLASSES.MODAL_ACTIVE);
+		// lock body scroll while modal is open
+		document.body.style.overflow = 'hidden';
 	}
 
 	/**
@@ -48,6 +50,8 @@ export class Modal implements IModal {
 	 */
 	close(): void {
 		this.container.classList.remove(CSS_CLASSES.MODAL_ACTIVE);
+		// restore body scroll
+		document.body.style.overflow = '';
 	}
 
 	/**

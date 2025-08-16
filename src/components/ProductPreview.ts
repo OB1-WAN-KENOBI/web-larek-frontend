@@ -1,5 +1,5 @@
 import { IProduct, IProductModel } from '../types';
-import { CSS_CLASSES, TEMPLATES, CDN_URL } from '../utils/constants';
+import { CSS_CLASSES, TEMPLATES, CDN_URL, EVENTS } from '../utils/constants';
 import {
 	cloneTemplate,
 	setText,
@@ -9,13 +9,16 @@ import {
 	formatPrice,
 	formatCategory,
 } from '../utils/utils';
+import { EventEmitter } from '../components/base/events';
 
 export class ProductPreview {
 	protected element: HTMLElement;
 	protected product: IProductModel | null = null;
 	protected button: HTMLButtonElement | null = null;
+	protected events: EventEmitter;
 
-	constructor() {
+	constructor(events: EventEmitter) {
+		this.events = events;
 		this.element = cloneTemplate(TEMPLATES.CARD_PREVIEW);
 		this.bindEvents();
 	}
@@ -40,18 +43,12 @@ export class ProductPreview {
 		if (this.product) {
 			if (this.product.inBasket) {
 				// Удаляем из корзины
-				const customEvent = new CustomEvent('product:remove', {
-					detail: { productId: this.product.id },
-					bubbles: true,
-				});
-				this.element.dispatchEvent(customEvent);
+				this.events.emit(EVENTS.PRODUCT_REMOVE, { productId: this.product.id });
 			} else {
 				// Добавляем в корзину
-				const customEvent = new CustomEvent('product:add', {
-					detail: { product: this.product },
-					bubbles: true,
-				});
-				this.element.dispatchEvent(customEvent);
+				this.events.emit(EVENTS.PRODUCT_ADD, { product: this.product });
+				// Закрываем модалку после покупки
+				this.events.emit(EVENTS.MODAL_CLOSE);
 			}
 		}
 	}

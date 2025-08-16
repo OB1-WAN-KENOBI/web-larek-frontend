@@ -325,9 +325,11 @@ export const deepClone = <T>(obj: T): T => {
 
 	if (typeof obj === 'object') {
 		const cloned = {} as T;
-		for (const key in obj) {
-			if (obj.hasOwnProperty(key)) {
-				cloned[key] = deepClone(obj[key]);
+		for (const key in obj as Record<string, unknown>) {
+			if (Object.prototype.hasOwnProperty.call(obj, key)) {
+				(cloned as Record<string, unknown>)[key] = deepClone(
+					(obj as Record<string, unknown>)[key]
+				) as unknown as T[keyof T];
 			}
 		}
 		return cloned;
@@ -362,7 +364,7 @@ export const capitalize = (str: string): string => {
 export const truncate = (
 	str: string,
 	length: number,
-	suffix: string = '...'
+	suffix = '...'
 ): string => {
 	if (str.length <= length) return str;
 	return str.slice(0, length) + suffix;
@@ -412,10 +414,7 @@ export const roundTo = (num: number, decimals: number): number => {
 /**
  * Форматирование даты
  */
-export const formatDate = (
-	date: Date,
-	format: string = 'DD.MM.YYYY'
-): string => {
+export const formatDate = (date: Date, format = 'DD.MM.YYYY'): string => {
 	const day = date.getDate().toString().padStart(2, '0');
 	const month = (date.getMonth() + 1).toString().padStart(2, '0');
 	const year = date.getFullYear();

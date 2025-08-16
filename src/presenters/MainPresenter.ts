@@ -12,6 +12,7 @@ import { Basket } from '../components/Basket';
 import { OrderForm } from '../components/OrderForm';
 import { Success } from '../components/Success';
 import { EVENTS, MODAL_TYPES, MESSAGES } from '../utils/constants';
+import { IProductModel } from '../types';
 
 export class MainPresenter implements IMainPresenter {
 	private events: EventEmitter;
@@ -39,7 +40,7 @@ export class MainPresenter implements IMainPresenter {
 		this.orderModel = orderModel;
 		this.productApi = productApi;
 		this.orderApi = orderApi;
-		this.view = new MainView();
+		this.view = new MainView(events);
 		this.modal = new Modal(
 			document.getElementById('modal-container') as HTMLElement
 		);
@@ -74,32 +75,6 @@ export class MainPresenter implements IMainPresenter {
 
 		// События ошибок
 		this.events.on(EVENTS.ERROR_SHOW, this.handleErrorShow.bind(this));
-
-		// DOM события
-		document.addEventListener(
-			'product:click',
-			this.handleProductClick.bind(this)
-		);
-		document.addEventListener(
-			'product:add',
-			this.handleProductAddEvent.bind(this)
-		);
-		document.addEventListener(
-			'product:remove',
-			this.handleProductRemoveEvent.bind(this)
-		);
-		document.addEventListener(
-			'basket:order',
-			this.handleBasketOrder.bind(this)
-		);
-		document.addEventListener(
-			'order:submit',
-			this.handleOrderSubmitEvent.bind(this)
-		);
-		document.addEventListener(
-			'success:close',
-			this.handleSuccessClose.bind(this)
-		);
 	}
 
 	/**
@@ -118,8 +93,8 @@ export class MainPresenter implements IMainPresenter {
 			const response = await this.productApi.getProducts();
 			this.productModel.setProducts(response.items);
 		} catch (error) {
-			this.view.showError(MESSAGES.PRODUCTS_LOAD_ERROR);
 			console.error('Ошибка загрузки товаров:', error);
+			this.view.showError(MESSAGES.PRODUCTS_LOAD_ERROR);
 		}
 	}
 
@@ -129,7 +104,7 @@ export class MainPresenter implements IMainPresenter {
 	openProductModal(productId: string): void {
 		const product = this.productModel.getProduct(productId);
 		if (product) {
-			const preview = new ProductPreview();
+			const preview = new ProductPreview(this.events);
 			preview.setProduct(product);
 			preview.setInBasket(product.inBasket);
 
@@ -143,10 +118,10 @@ export class MainPresenter implements IMainPresenter {
 	 * Открыть модальное окно корзины
 	 */
 	openBasketModal(): void {
-		const basket = new Basket();
-		const items = this.basketModel.getItems();
+		const basket = new Basket(this.events);
 
-		items.forEach((item) => basket.addItem(item));
+		// Обновляем корзину перед открытием
+		basket.updateBasket(this.basketModel.getItems());
 
 		this.modal.setContent(basket.render());
 		this.modal.open();
@@ -161,6 +136,16 @@ export class MainPresenter implements IMainPresenter {
 		const product = this.productModel.getProduct(productId);
 		if (product) {
 			this.basketModel.addItem(product);
+
+			// Обновляем счетчик корзины
+			this.view.updateBasketCount(this.basketModel.getCount());
+
+			// Если открыто модальное окно корзины, обновляем его
+			if (this.currentModal === 'basket') {
+				const basket = new Basket(this.events);
+				basket.updateBasket(this.basketModel.getItems());
+				this.modal.setContent(basket.render());
+			}
 		}
 	}
 
@@ -170,13 +155,23 @@ export class MainPresenter implements IMainPresenter {
 	removeFromBasket(productId: string): void {
 		this.productModel.removeFromBasket(productId);
 		this.basketModel.removeItem(productId);
+
+		// Обновляем счетчик корзины
+		this.view.updateBasketCount(this.basketModel.getCount());
+
+		// Если открыто модальное окно корзины, обновляем его
+		if (this.currentModal === 'basket') {
+			const basket = new Basket(this.events);
+			basket.updateBasket(this.basketModel.getItems());
+			this.modal.setContent(basket.render());
+		}
 	}
 
 	/**
 	 * Начать оформление заказа
 	 */
 	startOrder(): void {
-		const orderForm = new OrderForm();
+		const orderForm = new OrderForm(this.events);
 		this.modal.setContent(orderForm.render());
 		this.modal.open();
 		this.currentModal = 'order';
@@ -201,15 +196,18 @@ export class MainPresenter implements IMainPresenter {
 
 			const response = await this.orderApi.createOrder(order);
 
-			// Очищаем корзину
+			// Очищаем корзину и сбрасываем счётчик
 			this.basketModel.clear();
 			this.productModel.clearBasket();
+			this.view.updateBasketCount(0);
+			this.orderModel.reset();
 
 			// Показываем успешное сообщение
-			const success = new Success();
+			const success = new Success(this.events);
 			success.setTotal(order.total);
 
 			this.modal.setContent(success.render());
+			this.modal.open();
 			this.currentModal = 'success';
 		} catch (error) {
 			this.events.emit(EVENTS.ERROR_SHOW, {
@@ -226,12 +224,16 @@ export class MainPresenter implements IMainPresenter {
 		this.basketModel.syncWithProducts(data.products);
 	}
 
-	private handleProductAdd(data: { product: any }): void {
-		this.basketModel.addItem(data.product);
+	private handleProductAdd(data: { product: IProductModel }): void {
+		if (data.product) {
+			this.addToBasket(data.product.id);
+		}
 	}
 
 	private handleProductRemove(data: { productId: string }): void {
-		this.basketModel.removeItem(data.productId);
+		if (data.productId) {
+			this.removeFromBasket(data.productId);
+		}
 	}
 
 	private handleBasketUpdate(data: { basket: any }): void {
@@ -246,27 +248,23 @@ export class MainPresenter implements IMainPresenter {
 		this.startOrder();
 	}
 
-	private handleOrderSubmit(): void {
-		this.submitOrder();
+	private handleOrderSubmit(data: { data: any }): void {
+		if (data.data) {
+			this.orderModel.setPayment(data.data.payment);
+			this.orderModel.setAddress(data.data.address);
+			this.orderModel.setEmail(data.data.email);
+			this.orderModel.setPhone(data.data.phone);
+			this.submitOrder();
+		}
 	}
 
 	private handleOrderSuccess(): void {
 		// Обрабатывается в submitOrder
 	}
 
-	private handleModalOpen(data: { type: string; data?: any }): void {
-		switch (data.type) {
-			case MODAL_TYPES.PRODUCT:
-				if (data.data?.productId) {
-					this.openProductModal(data.data.productId);
-				}
-				break;
-			case MODAL_TYPES.BASKET:
-				this.openBasketModal();
-				break;
-			case MODAL_TYPES.ORDER:
-				this.startOrder();
-				break;
+	private handleModalOpen(data: { type: string; data: any }): void {
+		if (data.type === 'product') {
+			this.openProductModal(data.data.productId);
 		}
 	}
 
@@ -277,36 +275,5 @@ export class MainPresenter implements IMainPresenter {
 
 	private handleErrorShow(data: { message: string }): void {
 		this.view.showError(data.message);
-	}
-
-	// DOM обработчики событий
-
-	private handleProductClick(event: CustomEvent): void {
-		this.openProductModal(event.detail.product.id);
-	}
-
-	private handleProductAddEvent(event: CustomEvent): void {
-		this.addToBasket(event.detail.product.id);
-	}
-
-	private handleProductRemoveEvent(event: CustomEvent): void {
-		this.removeFromBasket(event.detail.productId);
-	}
-
-	private handleBasketOrder(event: CustomEvent): void {
-		this.startOrder();
-	}
-
-	private handleOrderSubmitEvent(event: CustomEvent): void {
-		this.orderModel.setPayment(event.detail.data.payment);
-		this.orderModel.setAddress(event.detail.data.address);
-		this.orderModel.setEmail(event.detail.data.email);
-		this.orderModel.setPhone(event.detail.data.phone);
-		this.submitOrder();
-	}
-
-	private handleSuccessClose(): void {
-		this.modal.close();
-		this.currentModal = null;
 	}
 }

@@ -78,7 +78,7 @@ export class BasketModel implements IBasketModelManager {
 	 */
 	private updateTotals(): void {
 		this.basket.total = this.basket.items.reduce(
-			(sum, item) => sum + item.price,
+			(sum, item) => sum + (item.price || 0),
 			0
 		);
 		this.basket.count = this.basket.items.length;
